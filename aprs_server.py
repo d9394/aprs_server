@@ -1,147 +1,237 @@
 #!/usr/bin/env python
 #coding=utf8
-
-import SocketServer
 import sys
+sys.path.append("/home/test/aprs/aprs-python-master")
+import socket
 import pymysql.cursors
-import datetime
 from time import sleep,ctime
-import string
 import re
-if sys.getdefaultencoding() != 'utf8' :
-	reload(sys)
-	sys.setdefaultencoding('utf8')
+import aprslib
+import threading
+import Queue
 
 mysql_config = {
 	"host": "localhost",
 	"port": 3306,
 	"user": "aprs",
-	"passwd": "123456",
+	"passwd": "aprs",
 	"db": "aprs",
 	"charset": "utf8",
 	"cursorclass": pymysql.cursors.DictCursor
 }
 
-def generate(callsign):
-	# This method derived from the xastir project under a GPL license.
-	seed = 0x73E2
+upstream_server = ("china.aprs2.net",14580)  # 上游APRS服务器
+forward_server = ("asia.aprs2.net",14580)  # 上游APRS服务器
+callsign = "test"  # 替换为你的呼号
+passcode = "12345"  # 替换为你的APRS-IS passcode
+#filter = "b/YOUR_FILTER"  # 替换为你想要使用的APRS过滤器
+#filter = "b/B*/VR2*/XX9*"
+filter = "r/35.0/103.0/2500"
 
-	odd = True
-	key = seed
-	for char in callsign.upper():
-		proc_char = ord(char)
-		if odd:
-			proc_char <<= 8
-		key = key ^ proc_char
-		odd = not odd
-	key &= 0x7FFF
-	return key
+aprspacket_sql="INSERT INTO aprspacket (`call`,datatype, lat, lon, `table`, symbol, msg, raw) VALUES ('%s','%s','%s','%s','%s','%s','%s','%s');"
+lastpacket_sql="REPLACE INTO lastpacket (`call`, datatype, lat, lon, `table`, symbol, msg) VALUES ('%s','%s','%s','%s','%s','%s','%s');"
+packetstatus_sql="INSERT INTO packetstats VALUES(curdate(),1) ON DUPLICATE KEY UPDATE packets=packets+1 ;"
+packetcount_sql="INSERT into aprspackethourcount values (DATE_FORMAT(now(), '%%Y-%%m-%%d %%H:00:00'), '%s', 1) ON DUPLICATE KEY UPDATE pkts=pkts+1 ;"
 
-class My_server(SocketServer.BaseRequestHandler):
-	def handle(self):
-		#while True:
-		data =self.request[0]
-#		print(data.decode('utf-8'))
-#		print(self.client_address,self.request[1])
-		aprs_decode(data.decode('utf-8'))
+queue_size = 1000  # 缓存队列大小
+data_queue = Queue.Queue(queue_size)
 
-def aprs_decode(data):
-	print data
-	#parameter=()
-	aprs_data=data.split("\r\n")
-	user_segments = re.search('user\s*([\w\-]+)\s*pass\s*([0-9]{5})(.*)',aprs_data[0])
-	while True:
-		if user_segments is not None:
-			(user,passcode) = user_segments.groups()
-			if passcode==generate(user) :
-				#print aprs_data[1]
-				while True:
-					#检测APRS位置包（不带timestamp）
-					packet_segments = re.search('([\w\-]+)>(.*):(=|!)([0-9.NS]{8})(/|D)([0-9.EW]{9})(>|\$|&|!)(.*)', aprs_data[1])
-					if packet_segments is not None:
-						(callsign, path, datatype, lat, tableid, long, symbolid, msg) = packet_segments.groups()
-						to_mysql(callsign, path, datatype, lat, tableid, long, symbolid, msg, aprs_data[1])
-						break
-					#检测APRS位置包（带timestamp）
-					packet_segments = re.search('([\w\-]+)>(.*):(@|/)([0-9z]{7})([0-9.NS]{8})(/|D)([0-9.EW]{9})(>|\$|&|!)(.*)', aprs_data[1])
-					if packet_segments is not None:
-						(callsign, path, timestamp, datatype, lat, tableid, long, symbolid, msg) = packet_segments.groups()
-						to_mysql(callsign, path, datatype, lat, tableid, long, symbolid, msg, aprs_data[1])
-						break
-					#检测APRS天气包（不带timestamp）
-					packet_segments = re.search('([\w\-]+)>(.*):(=|!)([0-9.NS]{8})(/|D)([0-9.EW]{9})_(.*)', aprs_data[1])
-					if packet_segments is not None:
-						(callsign, path, datatype, lat, tableid, long, symbolid, msg) = packet_segments.groups()
-						to_mysql(callsign, path, datatype, lat, tableid, long, symbolid, msg, aprs_data[1])
-						break
-					#检测APRS天气包（带timestamp）
-					packet_segments = re.search('([\w\-]+)>(.*):(/|@)([0-9z]{7})([0-9.NS]{8})(/|D)([0-9.EW]{9})_(.*)', aprs_data[1])
-					if packet_segments is not None:
-						(callsign, path, datatype, lat, tableid, long, symbolid, msg) = packet_segments.groups()
-						to_mysql(callsign, path, datatype, lat, tableid, long, symbolid, msg, aprs_data[1])
-						break
-					#检测APRS位置包（不带timestamp, 压缩坐标）
-					packet_segments = re.search('([\w\-]+)>(.*):('|`)(.{4})(.{4})($|/|`|]|')(.{2})(.{1})(.*)', aprs_data[1])
-					if packet_segments is not None:
-						(callsign, path, tableid, comp_lat, comp_long, symbolid, speed, comptype, msg) = packet_segments.groups()
-						
-			#			to_mysql(callsign, path, datatype, lat, tableid, long, symbolid, msg, aprs_data[1])
-						break
-			
+aprs_datetype={
+	'uncompressed':'=',
+	'compressed':'=',
+	'mic-e':'`',
+	'object':';',
+	'wx':'_',
+	'status':'>',
+	'message':':',
+	'telemetry-message':'T',
+}
+
+def decimal_to_aprs(latitude, longitude):
+	# 将十进制坐标转换为 APRS 格式
+	lat_degrees = int(latitude)
+	lat_minutes = abs(latitude - lat_degrees) * 60
+	lat_direction = "N" if latitude >= 0 else "S"
+
+	lon_degrees = int(longitude)
+	lon_minutes = abs(longitude - lon_degrees) * 60
+	lon_direction = "E" if longitude >= 0 else "W"
+
+	# APRS 格式要求整数部分和小数部分之间有一个点
+	lat_aprs = "%02d%04.2f%s" % (abs(lat_degrees), lat_minutes, lat_direction)
+	lon_aprs = "%03d%04.2f%s" % (abs(lon_degrees), lon_minutes, lon_direction)
+
+	return lat_aprs, lon_aprs
 	
-		
-def to_mysql(my_callsign, my_path, my_datatype, my_lat, my_tableid, my_long, my_symbolid, my_msg, my_rawdata):
-	global connection
-	aprspacket_sql="INSERT INTO aprspacket (`call`,datatype, lat, lon, `table`, symbol, msg, raw) VALUES (%s,%s,%s,%s,%s,%s,%s,%s);"
-	lastpacket_sql="REPLACE INTO lastpacket (`call`, datatype, lat, lon, `table`, symbol, msg) VALUES (%s,%s,%s,%s,%s,%s,%s);"
-	packetstatus_sql="INSERT INTO packetstats VALUES(curdate(),1) ON DUPLICATE KEY UPDATE packets=packets+1 ;"
-	packetcount_sql="INSERT into aprspackethourcount values (DATE_FORMAT(now(), '%%Y-%%m-%%d %%H:00:00'), %s, 1) ON DUPLICATE KEY UPDATE pkts=pkts+1 ;"
+def aprs_decode(mycall, aprs):
+	#print('raw packet: %s ' % aprs)
+	try :
+		data=aprslib.parse(aprs)
+		lat,lon = decimal_to_aprs(data['latitude'], data['longitude'])
+		try :
+			datatype = aprs_datatype(data['format'])
+		except :
+			datatype = ','
+		data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), data['comment'][:200].replace("'", "''"), data['raw'][:500].replace("\\","\\\\").replace("'", "''")))
+		data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), data['comment'][:200].replace("'", "''")))
+	except Exception as e:
+		#print(u'无法解包：%s' % (aprs))
+		#print(u'\t错误原因：%s' % e)
+		data_queue.put( aprspacket_sql % (mycall[:16], '', '', '', '','','', aprs[:500].replace("'", "''")))
+	data_queue.put(packetcount_sql % mycall[:16])
 
-	print " %s %s %s %s %s %s %s %s " % (my_callsign, my_path, my_datatype, my_lat, my_tableid, my_long, my_symbolid, my_msg)
-	try:
-		with connection.cursor() as cursor:
-			cursor.execute(aprspacket_sql,(my_callsign, my_datatype, my_lat, my_long, my_tableid, my_symbolid, my_msg, my_rawdata))
-		connection.commit()
-		with connection.cursor() as cursor:
-			cursor.execute(lastpacket_sql,(my_callsign, my_datatype, my_lat, my_long, my_tableid, my_symbolid, my_msg))
-		connection.commit()
-		with connection.cursor() as cursor:
-			cursor.execute(packetcount_sql, (my_callsign))
-		connection.commit()
-		with connection.cursor() as cursor:
-			cursor.execute(packetstatus_sql)
-		connection.commit()
-		print "Commit insert data"
-	except Exception as e: 
-		print "roolback with %s " % (e)
-		connection.rollback()
+def to_mysql():
+	connection = None
+	while True :
+		if connection is None :
+			connection = mysql_connect()
+		if data_queue.qsize() > 0 :
+			#print("当前序列总数 %d" % data_queue.qsize())
+			try:
+				with connection.cursor() as cursor:
+					cursor.execute(data_queue.get())
+				connection.commit()
+			except Exception as e: 
+				print("roolback %s " % ( e))
+				connection.rollback()
+			finally :
+				data_queue.task_done()
+		else :
+			try:
+				connection.ping()
+				sleep(1)
+			except:
+				connection = None
 			
 def mysql_connect() :
-	global connection
 	#参考地址：https://github.com/PyMySQL/PyMySQL#installation
 	while True:
 		try:
 			connection = pymysql.connect(**mysql_config)
+			print(u'%s Mysql connect success' % (ctime()))
 			break
-		except :
-			print "Connect to mysql error, try again after 10s"
-			sleep(60)
+		except Exception as e:
+			print(u"%s : Connect to mysql error, try again after 5s : %s" % (ctime(), e))
+			sleep(5)
 			continue
-		
+	return connection
+
+def connect_to_aprs_server(upstream_server, callsign, passcode, filter):
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sock.connect(upstream_server)
+	login = "user %s pass %s vers python-aprs 1.0 filter %s\n" % (callsign, passcode, filter)
+	#user BA7IB pass 17642 vers python-aprs 1.0 filter b/B*
+	sock.sendall(login.encode('utf-8'))
+	return sock
+	
+def process_aprs_data(get_aprs):
+	try:
+	# 尝试使用 UTF-8 解码
+		decoded_str = get_aprs.decode('utf-8')
+	except UnicodeDecodeError:
+		try:
+		# 如果 UTF-8 失败，尝试使用 GB2312 解码
+			decoded_str = get_aprs.decode('gb2312')
+		except UnicodeDecodeError:
+		# 如果两者都失败，使用默认解码
+			try :
+				decoded_str = get_aprs.decode()
+			except UnicodeDecodeError :
+				decoded_str = ""
+				#print(u'接收包解码错误：%s' % get_aprs)
+	packet_segments = re.search(r'([A-Za-z0-9\-]+)>(.*)', decoded_str)
+	if packet_segments is not None :
+		try:
+			aprs_decode(packet_segments.groups()[0], decoded_str)
+		#except aprslib.exceptions.ParseError:
+		except Exception as e:
+			#print(u"无法解析的数据: %s，错误原因：%s " %(decoded_str,e))
+			pass
+
+def aprs_tcp_client():
+	sock = connect_to_aprs_server(upstream_server, callsign, passcode, filter)
+	while True :
+		get_packet = sock.recv(4096)
+		for line in get_packet.split('\n'):
+			if line:
+				process_aprs_data(line)
+	print("连接关闭")
+	sock.close()
+
+def aprs_tcp_server():
+	while True :
+		sleep(1600)
+	
+def aprs_udp_server():
+	mSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	mSocket.bind(("0.0.0.0",14580)) 
+	while True:
+		recvData, (remoteHost, remotePort) = mSocket.recvfrom(1024)
+		try :
+			recvData=recvData.decode().strip()
+			#print("%s Recv APRS UDP: %s\n from %s:%s" % (ctime(), recvData,remoteHost, remotePort))
+			mSocket.sendto("R".encode("UTF-8"),(remoteHost, remotePort))
+		except Exception as e :
+			print(u'%s Recv %s:%s APRS UDP error: %s' % (ctime(),remoteHost, remotePort, recvData))
+		else :
+			if len(recvData)>0 :
+				aprs_data=recvData.split("\r\n")
+				user_segments = re.search('user\s*([\w\-]+)\s*pass\s*([0-9]{5})(.*)',aprs_data[0])
+				if user_segments is not None:
+					(user, passcode, tmp) = user_segments.groups()
+					#print("UDP User %s Passcode %s" % (user,passcode))
+					if int(passcode)==aprslib.passcode(str(user[0:user.find("-")])) :
+						aprs_decode(str(user),aprs_data[1])
+						#aprs_udp_sent(recvData)
+	mSocket.close()
+
+def aprs_udp_sent(msg):
+	uSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+	for m in msg.split("\r\n") :
+		uSocket.sendto(m.encode('utf-8'), forward_server)
+	print('%s Forward to %s Message: %s' %(ctime(), forward_server, msg))
+	uSocket.close()
+	
+## 线程状态管理
+threads = {}
+thread_targets = {
+	'aprs_tcp_server': aprs_tcp_server,
+	'aprs_udp_server': aprs_udp_server,
+	'aprs_tcp_client': aprs_tcp_client,
+	'to_mysql': to_mysql
+}
+
+# 启动线程
+def start_thread(name, target):
+	thread = threading.Thread(target=target, name=name)
+	thread.setDaemon(True)  # 将线程设置为守护线程
+	thread.start()
+	threads[name] = thread
+	print("%s Starting %s thread" % (ctime(),name))
+
+# 检查线程状态
+def check_threads():
+	while True:
+		for name, thread in threads.items():
+			if not thread.is_alive():
+				#print("%s : %s is not alive. Restarting..." % (ctime(),name))
+				start_thread(name, thread_targets[name])
+		sleep(5)  
 
 if __name__ == '__main__':
-	mysql_connect()
+	# 使用循环启动所有线程
+	for name, target in thread_targets.items():
+		start_thread(name, target)
+	
+	# 启动线程检查
+	check_thread = threading.Thread(target=check_threads)
+	check_thread.setDaemon(True)  # 将线程设置为守护线程
+	check_thread.start()
+	
+	# 主线程保持运行
+	try:
+		while True:
+			sleep(10)
+	except KeyboardInterrupt:
+		print("Shutting down...")
 
-	ip_port =('0.0.0.0',14580)
-	obj =SocketServer.ThreadingUDPServer(ip_port,My_server)
-	obj.daemon=True
-	obj.serve_forever()
-	while True:
-		sleep(500)
-		print ctime()
-		try:
-			connection.ping()
-		except:
-#			print "\nReconnecting Mysql db @ %s" % ctime()
-			mysql_connect()
-	connection.close()
