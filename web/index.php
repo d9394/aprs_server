@@ -2,7 +2,7 @@
 
 include "db.php";
 
-$ak = "7RuEGPr12yqyg11XVR9Uz7NI";
+$ak = "aaaaaaaaaaaaaaaaaaaaaaaaaa";	//改为你自已的百度地图API KEY
 
 date_default_timezone_set( 'Asia/Shanghai');
 
@@ -105,12 +105,14 @@ function GetIP(){
 	return $realip;  
 }  
 
-function urlmessage($call, $icon, $dtmstr, $msg, $path, $ddt) {
+function urlmessage($call, $icon, $dtmstr, $msg, $ddt) {
 	global $mysqli;
 	global $startdatestr;
-	$m = "<font face=微软雅黑 size=2><img src=".$icon."> ".$call." <a href=".$_SERVER["PHP_SELF"]."?call=".$call." target=_blank>数据包</a> <a id=\\\"m\\\" href=\\\"#\\\" onclick=\\\"javascript:monitor_station('".$call."');return false;\\\">";
+	//$m = "<font face=微软雅黑 size=2><img src=".$icon."> ".$call." <a href=".$_SERVER["PHP_SELF"]."?call=".$call." target=_blank>数据包</a> <a id=\\\"m\\\" href=\\\"#\\\" onclick=\\\"javascript:monitor_station('".$call."');return false;\\\">";
+	$m = "<font face=微软雅黑 size=2><img src=".$icon."> ".$call." <a href=".$_SERVER["PHP_SELF"]."?call=".$call.">数据包</a> <a id=\\\"m\\\" href=\\\"#\\\" onclick=\\\"javascript:monitor_station('".$call."');return false;\\\">";
 	$m = $m."切换跟踪</a> ";
-	$m = $m."<a href=".$_SERVER["PHP_SELF"]."?track=".$call." target=_blank>轨迹下载</a> ";
+	//$m = $m."<a href=".$_SERVER["PHP_SELF"]."?track=".$call." target=_blank>轨迹下载</a> ";
+	$m = $m."<a href=".$_SERVER["PHP_SELF"]."?track=".$call.">轨迹下载</a> ";
 	$m = $m."<hr color=green>".$dtmstr."<br>";
 
 	$msg = rtrim($msg);
@@ -123,19 +125,13 @@ function urlmessage($call, $icon, $dtmstr, $msg, $path, $ddt) {
 		(substr($msg,3,1)=='/') &&
 		(substr($msg,7,1)=='g') &&
 		(substr($msg,11,1)=='t') &&
-		( (substr($msg,15,1)=='r') // 090/001g003t064r000p000h24b10212 or 000/000g000t064r000P000p000h39b10165
-                ||(substr($msg,16,1)=='r')))  // 090/001g003t0064r000p000h24b10212 or 000/000g000t0064r000P000p000h39b10165
+		(substr($msg,15,1)=='r') )  // 090/001g003t064r000p000h24b10212 or 000/000g000t064r000P000p000h39b10165
 	{
 		$c = substr($msg,0,3)*1; //wind dir
 		$s = number_format(substr($msg,4,3)*0.447,1); //wind speed
 		$g = number_format(substr($msg,8,3)*0.447,1); //5min wind speed
-		if(substr($msg,15,1)=='r') {
-			$t = number_format((substr($msg,12,3)-32)/1.8,1); //temp
-			$r = number_format(substr($msg,16,3)*25.4/100,1); //rainfall in mm 1 hour
-		} else {
-			$t = number_format((substr($msg,12,4)-32)/1.8,1); //temp
-			$r = number_format(substr($msg,17,3)*25.4/100,1); //rainfall in mm 1 hour
-		}
+		$t = number_format((substr($msg,12,3)-32)/1.8,1); //temp
+		$r = number_format(substr($msg,16,3)*25.4/100,1); //rainfall in mm 1 hour
 		$msg = strstr($msg,"p");
 		$p = number_format(substr($msg,1,3)*25.4/100,1); //rainfall in mm 24 hour
 		$msg = strstr($msg,"h");
@@ -263,17 +259,7 @@ function urlmessage($call, $icon, $dtmstr, $msg, $path, $ddt) {
                 $m = $m."<b>功率".$pwr."瓦 天线高度".$h."m 增益".$g."dB</b><br>";
                 $msg = substr($msg,7);
 	}
-	if( (strlen($msg)>=9) &&
-		strstr($msg,"MHz/A=") )       // 430.100MHz/A=000392
-	{	
-		$hz = substr($msg,0,strpos($msg,"MHz/A="));
-		$msg = strstr($msg,"MHz/A=");
-		$msg = substr($msg,4);
-		$alt=number_format(substr($msg,3,6)*0.3048,1);
-		$m = $m."<b> 海拔".$alt."m</b><br>";
-		$msg = $hz."MHz ".substr($msg,9);
-	}	
-	
+		
 	if(strlen($msg)>0)
 	$m = $m."</font><font color=green face=微软雅黑 size=2>".addcslashes(htmlspecialchars($msg),"\\\r\n'\"")."</font><br>";
 
@@ -295,12 +281,10 @@ function urlmessage($call, $icon, $dtmstr, $msg, $path, $ddt) {
 			$t = strpos($rawmsg, "/UDP");
 			if($t !== false )
 				$rawmsg = substr($rawmsg, 0, $t);
-			$m = $m."<font color=red face=微软雅黑 size=2>".addcslashes(htmlspecialchars($rawmsg),"\\\r\n'\"")."</font><br>";
+			$m = $m."<font color=red face=微软雅黑 size=2>".addcslashes(htmlspecialchars($rawmsg),"\\\r\n'\"")."</font>";
 		}
 	}	
 	$stmt->close();
-	if($path!="") 
-		$m = $m."<font color=black face=微软雅黑 size=2>[".htmlspecialchars($path)."]</font>";
 	return $m;	
 }
 
@@ -361,16 +345,16 @@ if ($cmd=="tm") {
 		$tm = time() - 15*60;
 	if (isset($_REQUEST["call"]))  {
 		$call=$_REQUEST["call"];
-		$q="select lat,lon,`call`,unix_timestamp(tm),tm,concat(`table`,symbol),msg,datatype,path from lastpacket where (`call`=? or (tm>=FROM_UNIXTIME(?) and tm>=?) ) and lat<>'' and not lat like '0000.00%'";
+		$q="select lat,lon,`call`,unix_timestamp(tm),tm,concat(`table`,symbol),msg,datatype from lastpacket where (`call`=? or (tm>=FROM_UNIXTIME(?) and tm>=?) ) and lat<>'' and not lat like '0000.00%'";
 		$stmt=$mysqli->prepare($q);
         	$stmt->bind_param("sis",$call,$tm,$startdatestr);
 	} else {
-		$q="select lat,lon,`call`,unix_timestamp(tm),tm,concat(`table`,symbol),msg,datatype,path from lastpacket where tm>=FROM_UNIXTIME(?) and tm>=? and lat<>'' and not lat like '0000.00%'";
+		$q="select lat,lon,`call`,unix_timestamp(tm),tm,concat(`table`,symbol),msg,datatype from lastpacket where tm>=FROM_UNIXTIME(?) and tm>=? and lat<>'' and not lat like '0000.00%'";
 		$stmt=$mysqli->prepare($q);
         	$stmt->bind_param("is",$tm,$startdatestr);
 	}
         $stmt->execute();
-       	$stmt->bind_result($glat,$glon,$dcall,$dtm,$dtmstr,$dts,$dmsg,$ddt,$dpath);
+       	$stmt->bind_result($glat,$glon,$dcall,$dtm,$dtmstr,$dts,$dmsg,$ddt);
 	$stmt->store_result();
 	while($stmt->fetch()) {
                 $lat = strtolat($glat);
@@ -389,7 +373,7 @@ if ($cmd=="tm") {
 		if ( $lat < $lat1) continue;
 		if ( $lat > $lat2) continue;
 		$icon = "img/".bin2hex($dts).".png";
-		$dmsg = urlmessage($dcall, $icon, $dtmstr, $dmsg, $dpath, $ddt);
+		$dmsg = urlmessage($dcall, $icon, $dtmstr, $dmsg,$ddt);
 		echo "setstation(".$lon.",".$lat.",\"".$dcall."\",".$dtm.",\"".$icon."\",\n\"".$dmsg."\");\n";
 	}
 	$stmt->close();
@@ -452,19 +436,19 @@ if ($cmd=="tm") {
 }
 
 function disp_map($call) {
-	echo "<a href=\"http://aprs.fi/#!mt=roadmap&z=11&call=a%2F".$call."&timerange=43200&tail=43200\" target=_blank>aprs.fi</a> ";
-	echo "<a href=\"http://aprs.hamclub.net/mtracker/map/aprs/".$call."\" target=_blank>hamclub</a> ";
-	echo "<a href=\"http://aprs.hellocq.net/\" target=_blank>hellocq</a> ";
-	echo "<a href=\"".$_SERVER["PHP_SELF"]."?map&call=".$call."\" target=_blank>本站</a> ";
+	echo "<a href=\"https://aprs.fi/#!mt=roadmap&z=11&call=a%2F".$call."&timerange=43200&tail=43200\" target=_blank>aprs.fi</a> ";
+	echo "<a href=\"https://aprs.hamclub.net/mtracker/map/aprs/".$call."\" target=_blank>hamclub</a> ";
+	//echo "<a href=\"https://aprs.hellocq.net/\" target=_blank>hellocq</a> ";
+	echo "<a href=\"".$_SERVER["PHP_SELF"]."?map&call=".$call."\">本站</a> ";
 }
 
 function top_menu() {
 	global $mysqli, $cmd;
 	$blank="";
-	if($cmd=="map") $blank = " target=_blank";
+	//if($cmd=="map") $blank = " target=_blank";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?new".$blank.">最新</a> <a href=".$_SERVER["PHP_SELF"]."?today".$blank.
 	">今天</a> <a href=".$_SERVER["PHP_SELF"]."?stats".$blank.">统计</a> ";
-	echo "<a href=".$_SERVER["PHP_SELF"]."?map target=_blank>地图</a> ";
+	echo "<a href=".$_SERVER["PHP_SELF"]."?map ".$blank.">地图</a> ";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?ge>地球</a> ";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?setup>设置</a> ";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?about>关于</a> ";
@@ -499,15 +483,16 @@ if ($cmd=="map") {
 		#search { display:inline;} 
 	</style>
 	<title><?php echo $title; ?></title>
-	<script type="text/javascript" src="http://api.map.baidu.com/api?v=2.0&ak=<?php echo $ak;?>"></script>
+	<script type="text/javascript" src="https://api.map.baidu.com/api?v=2.0&ak=<?php echo $ak;?>"></script>
 </head>
 <body>
 <div id="full">
 	<div id="top"><?php
-	$blank = " target=_blank";
+	//$blank = " target=_blank";
+	$blank = "";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?new".$blank.">最新</a> <div id=ge><a href=".$_SERVER["PHP_SELF"]."?ge".$blank.
 	">地球</a> </div>";
-	echo "<a href=".$_SERVER["PHP_SELF"]."?setup target=_blank>设置</a> ";
+	echo "<a href=".$_SERVER["PHP_SELF"]."?setup ".$blank.">设置</a> ";
 	echo" <div id=calls></div><div id=inview></div><div id=pkts></div> ";
 	echo "<div id=msg></div><div id=pathlen></div><div id=autocenter></div>";
 	echo "<div id=disp15min></div>";
@@ -798,6 +783,11 @@ map.enableScrollWheelZoom();
 
 var top_left_control = new BMap.ScaleControl({anchor: BMAP_ANCHOR_TOP_LEFT});// 左上角，添加比例尺
 var top_left_navigation = new BMap.NavigationControl();  //左上角，添加默认缩放平移控件
+
+// 添加路况控件
+var traffic = new BMap.TrafficLayer();
+map.addTileLayer(traffic);
+
 	
 //添加控件和比例尺
 map.addControl(top_left_control);        
@@ -816,7 +806,7 @@ map.addEventListener('resize', map_resize);
 		echo "UpdateStation();\n";
 	} else  {			// try IP location
 		$IP = GetIP();
-  		$content = file_get_contents("http://api.map.baidu.com/location/ip?ak=".$ak."&ip=".$IP."&coor=bd09ll");
+  		$content = file_get_contents("https://api.map.baidu.com/location/ip?ak=".$ak."&ip=".$IP."&coor=bd09ll");
   		$json = json_decode($content);
 		if(isset($json->{'status'}) && ($json->{'status'}==0)) {
 			echo "map.centerAndZoom(new BMap.Point(";
@@ -1022,7 +1012,7 @@ function download_kml($call, $startdatestr, $enddatestr) {
 	header("Content-Type:application/gpx+xml");
 	header("Content-Disposition:attachment; filename=\"".$call."-".$startdatestr."Track.kml\"");
 	echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-	echo "<kml xmlns=\"http://www.opengis.net/kml/2.2\" xmlns:gx=\"http://www.google.com/kml/ext/2.2\">\n";
+	echo "<kml xmlns=\"https://www.opengis.net/kml/2.2\" xmlns:gx=\"https://www.google.com/kml/ext/2.2\">\n";
 	echo "<Document>\n";
 	echo "<name>".$call." Track</name>\n";?>
 	<Style id="ylw">
@@ -1130,7 +1120,7 @@ if ($cmd=="new") {
 	}
 	echo "</table>\n";
 
-
+/*
 	echo "<h3>最新收到的气象站APRS数据包</h3>";
 	$q="select tm,`call`,raw from aprspacket where tm>=curdate() and `call` like '%-13' order by tm desc limit 10";
 	$result = $mysqli->query($q);
@@ -1145,6 +1135,7 @@ if ($cmd=="new") {
         	echo "</td></tr>\n";
 	}
 	echo "</table>\n";
+*/
 	exit(0);
 }
 
