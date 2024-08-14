@@ -65,6 +65,7 @@ def decimal_to_aprs(latitude, longitude):
 	
 def aprs_decode(mycall, aprs):
 	#print('raw packet: %s ' % aprs)
+	data_queue.put(packetstatus_sql)
 	try :
 		data=aprslib.parse(aprs)
 		lat,lon = decimal_to_aprs(data['latitude'], data['longitude'])
