@@ -446,8 +446,8 @@ function top_menu() {
 	global $mysqli, $cmd;
 	$blank="";
 	//if($cmd=="map") $blank = " target=_blank";
-	echo "<a href=".$_SERVER["PHP_SELF"]."?new".$blank.">最新</a> <a href=".$_SERVER["PHP_SELF"]."?today".$blank.
-	">今天</a> <a href=".$_SERVER["PHP_SELF"]."?stats".$blank.">统计</a> ";
+	echo "<a href=".$_SERVER["PHP_SELF"]."?new".$blank.">最新</a> <a href=".$_SERVER["PHP_SELF"]."?today".$blank.">今天</a> ";
+	//echo "<a href=".$_SERVER["PHP_SELF"]."?stats".$blank.">统计</a> ";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?map ".$blank.">地图</a> ";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?ge>地球</a> ";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?setup>设置</a> ";
@@ -490,8 +490,8 @@ if ($cmd=="map") {
 	<div id="top"><?php
 	//$blank = " target=_blank";
 	$blank = "";
-	echo "<a href=".$_SERVER["PHP_SELF"]."?new".$blank.">最新</a> <div id=ge><a href=".$_SERVER["PHP_SELF"]."?ge".$blank.
-	">地球</a> </div>";
+	echo "<a href=".$_SERVER["PHP_SELF"]."?new".$blank.">最新</a> ";
+	echo <div id=ge><a href=".$_SERVER["PHP_SELF"]."?ge".$blank.">地球</a> </div>";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?setup ".$blank.">设置</a> ";
 	echo" <div id=calls></div><div id=inview></div><div id=pkts></div> ";
 	echo "<div id=msg></div><div id=pathlen></div><div id=autocenter></div>";
@@ -778,7 +778,7 @@ function centertounknow(){
 }
 
 // 百度地图API功能
-var map = new BMap.Map("allmap");
+var map = new BMap.Map("allmap",{minZoom: 6});
 map.enableScrollWheelZoom();
 
 var top_left_control = new BMap.ScaleControl({anchor: BMAP_ANCHOR_TOP_LEFT});// 左上角，添加比例尺
