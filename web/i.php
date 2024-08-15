@@ -784,7 +784,7 @@ function centertounknow(){
 }
 
 // 百度地图API功能
-var map = new BMap.Map("allmap");
+var map = new BMap.Map("allmap",{minZoom: 7});
 map.enableScrollWheelZoom();
 
 var top_left_control = new BMap.ScaleControl({anchor: BMAP_ANCHOR_TOP_LEFT});// 左上角，添加比例尺
