@@ -24,17 +24,16 @@ upstream_server = ("china.aprs2.net",14580)  # 上游APRS服务器
 forward_server = ("asia.aprs2.net",14580)  # 上游APRS服务器
 callsign = "test"  # 替换为你的呼号
 passcode = "12345"  # 替换为你的APRS-IS passcode
-#filter = "b/YOUR_FILTER"  # 替换为你想要使用的APRS过滤器
 #filter = "b/B*/VR2*/XX9*"
-filter = "r/35.0/103.0/2500"
+filter = "r/35.0/103.0/2500" # 替换为你想要使用的APRS过滤器
 
 aprspacket_sql="INSERT INTO aprspacket (`call`,datatype, lat, lon, `table`, symbol, msg, raw) VALUES ('%s','%s','%s','%s','%s','%s','%s','%s');"
 lastpacket_sql="REPLACE INTO lastpacket (`call`, datatype, lat, lon, `table`, symbol, msg) VALUES ('%s','%s','%s','%s','%s','%s','%s');"
 packetstatus_sql="INSERT INTO packetstats VALUES(curdate(),1) ON DUPLICATE KEY UPDATE packets=packets+1 ;"
 packetcount_sql="INSERT into aprspackethourcount values (DATE_FORMAT(now(), '%%Y-%%m-%%d %%H:00:00'), '%s', 1) ON DUPLICATE KEY UPDATE pkts=pkts+1 ;"
 
-queue_size = 1000  # 缓存队列大小
-data_queue = Queue.Queue(queue_size)
+data_queue = Queue.Queue(1000)  # SQL缓存队列大小:1000
+aprs_queue = Queue.Queue(1000)  # 转发缓存队列大小:1000
 
 aprs_datetype={
 	'uncompressed':'=',
@@ -73,8 +72,8 @@ def aprs_decode(mycall, aprs):
 			datatype = aprs_datatype(data['format'])
 		except :
 			datatype = ','
-		data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), data['comment'][:200].replace("'", "''"), data['raw'][:500].replace("\\","\\\\").replace("'", "''")))
-		data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), data['comment'][:200].replace("'", "''")))
+		data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200], (data['raw'].replace("\\","\\\\").replace("'", "''"))[:500]))
+		data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200]))
 	except Exception as e:
 		#print(u'无法解包：%s' % (aprs))
 		#print(u'\t错误原因：%s' % e)
@@ -117,11 +116,11 @@ def mysql_connect() :
 			continue
 	return connection
 
-def connect_to_aprs_server(upstream_server, callsign, passcode, filter):
+def connect_to_aprs_server(upt2aprs_server, callsign, passcode, filter):
 	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	sock.connect(upstream_server)
+	sock.connect(upt2aprs_server)
 	login = "user %s pass %s vers python-aprs 1.0 filter %s\n" % (callsign, passcode, filter)
-	#user BA7IB pass 17642 vers python-aprs 1.0 filter b/B*
+	#user N0CALL-1 pass 13023 vers python-aprs 1.0 filter b/B*
 	sock.sendall(login.encode('utf-8'))
 	return sock
 	
@@ -150,12 +149,20 @@ def process_aprs_data(get_aprs):
 			pass
 
 def aprs_tcp_client():
-	sock = connect_to_aprs_server(upstream_server, callsign, passcode, filter)
+	sock = connect_to_aprs_server(t2aprs_server, callsign, passcode, filter)
 	while True :
 		get_packet = sock.recv(4096)
 		for line in get_packet.split('\n'):
 			if line:
 				process_aprs_data(line)
+		while aprs_queue.qsize() > 0 :
+			try :
+				aprs_data = (aprs_queue.get()+"\n").encode('utf-8')
+				sock.sendall(aprs_data)
+			except Exception as e:
+				print("%s 转发aprs失败：%s" % (ctime(), e))
+			finally:
+				aprs_queue.task_done()
 	print("连接关闭")
 	sock.close()
 
@@ -179,20 +186,22 @@ def aprs_udp_server():
 				aprs_data=recvData.split("\r\n")
 				user_segments = re.search('user\s*([\w\-]+)\s*pass\s*([0-9]{5})(.*)',aprs_data[0])
 				if user_segments is not None:
-					(user, passcode, tmp) = user_segments.groups()
+					(user, passcode, _) = user_segments.groups()
 					#print("UDP User %s Passcode %s" % (user,passcode))
 					if int(passcode)==aprslib.passcode(str(user[0:user.find("-")])) :
 						aprs_decode(str(user),aprs_data[1])
-						#aprs_udp_sent(recvData)
+						aprs_queue.put(aprs_data[1])
 	mSocket.close()
-
+"""
 def aprs_udp_sent(msg):
 	uSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-	for m in msg.split("\r\n") :
-		uSocket.sendto(m.encode('utf-8'), forward_server)
+	#for m in msg.split("\r\n") :
+		#uSocket.sendto(m.encode('utf-8'), forward_server)
+	uSocket.sendto(msg.replace("\r\n","\n").encode('utf-8'), forward_server)
 	print('%s Forward to %s Message: %s' %(ctime(), forward_server, msg))
 	uSocket.close()
-	
+"""
+
 ## 线程状态管理
 threads = {}
 thread_targets = {
@@ -235,4 +244,5 @@ if __name__ == '__main__':
 			sleep(10)
 	except KeyboardInterrupt:
 		print("Shutting down...")
+
 
