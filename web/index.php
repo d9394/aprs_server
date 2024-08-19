@@ -459,6 +459,10 @@ function top_menu() {
 	echo "</form><p>";
 }
 
+function page_footer() {
+	echo "</body></html>\n";
+}
+
 if ($cmd=="map") {  
 ?>
 <!DOCTYPE html>
@@ -490,8 +494,8 @@ if ($cmd=="map") {
 	<div id="top"><?php
 	//$blank = " target=_blank";
 	$blank = "";
-	echo "<a href=".$_SERVER["PHP_SELF"]."?new".$blank.">最新</a> ";
-	echo <div id=ge><a href=".$_SERVER["PHP_SELF"]."?ge".$blank.">地球</a> </div>";
+	echo "<a href=".$_SERVER["PHP_SELF"]."?new".$blank.">最新</a> <div id=ge><a href=".$_SERVER["PHP_SELF"]."?ge".$blank.
+	">地球</a> </div>";
 	echo "<a href=".$_SERVER["PHP_SELF"]."?setup ".$blank.">设置</a> ";
 	echo" <div id=calls></div><div id=inview></div><div id=pkts></div> ";
 	echo "<div id=msg></div><div id=pathlen></div><div id=autocenter></div>";
@@ -824,6 +828,7 @@ map.addEventListener('resize', map_resize);
 </script>
 </html>
 <?php
+	page_footer();
 	exit(0);
 }
 
@@ -886,6 +891,7 @@ if($cmd=="track") {
 			download_gpx($call, $startdatestr, $enddatestr);
 		else
 			download_kml($call, $startdatestr, $enddatestr);
+		page_footer();
 		exit(0);
 	}
 }
@@ -920,6 +926,7 @@ Content-Type:application/gpx+xml
         }	
 	echo "</trkseg></trk>\n";
 	echo "</gpx>\n";
+	page_footer();
 	exit(0);
 }
 
@@ -1053,6 +1060,7 @@ function download_kml($call, $startdatestr, $enddatestr) {
 	echo "</Folder>\n";
 	echo "</Document>\n";
 	echo "</kml>\n";
+	page_footer();
 	exit(0);
 }
 ?>
@@ -1084,6 +1092,7 @@ if($cmd=="track") {
 	echo "<input name=enddate type=date value=".$startdatestr."><p>";
 	echo "请选择轨迹类型： GPX格式<input type=radio name=type value=gpx>  KML格式<input type=radio checked name=type value=kml><p>";
 	echo "<input type=submit value=\"下载\">";
+	page_footer();
 	exit(0);
 }
 
@@ -1136,6 +1145,7 @@ if ($cmd=="new") {
 	}
 	echo "</table>\n";
 */
+	page_footer();
 	exit(0);
 }
 
@@ -1189,6 +1199,7 @@ if ($cmd=="today") {
         	echo "</td></tr>\n";
 	}
 	echo "</table>";
+	page_footer();
 	exit(0);
 }
 
@@ -1230,6 +1241,7 @@ if ($cmd=="call") {
         	echo "</td></tr>\n";
 	}
 	echo "</table>";
+	page_footer();
 	exit(0);
 }
 
@@ -1281,6 +1293,7 @@ so.write("flashcontent4");
 </tr>
 </table>
 <?php
+	page_footer();
 	exit(0);
 }
 
@@ -1312,6 +1325,7 @@ if ($cmd=="ge") {
 	echo "<p><input type=submit value=\"启动Google Earth\">";
 	echo "<p>";
 	echo "</form>";
+	page_footer();
 	exit(0);
 }
 
@@ -1412,6 +1426,7 @@ if ($cmd=="setup") {
 }
 if ($cmd=="about") {
 	include "about.html";
+	page_footer();
 	exit(0);
 }
 ?>
