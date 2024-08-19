@@ -35,7 +35,7 @@ packetcount_sql="INSERT into aprspackethourcount values (DATE_FORMAT(now(), '%%Y
 data_queue = Queue.Queue(1000)  # SQL缓存队列大小:1000
 aprs_queue = Queue.Queue(1000)  # 转发缓存队列大小:1000
 
-aprs_datetype={
+aprs_datatype={
 	'uncompressed':'=',
 	'compressed':'=',
 	'mic-e':'`',
@@ -69,16 +69,19 @@ def aprs_decode(mycall, aprs):
 		data=aprslib.parse(aprs)
 		lat,lon = decimal_to_aprs(data['latitude'], data['longitude'])
 		try :
-			datatype = aprs_datatype(data['format'])
+			datatype = aprs_datatype[data['format']]
 		except :
 			datatype = ','
-		data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200], (data['raw'].replace("\\","\\\\").replace("'", "''"))[:500]))
-		data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200]))
+		if datatype in ('=', ':', '`', 'T'):		#本站只记录定位包
+			data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200], (data['raw'].replace("\\","\\\\").replace("'", "''"))[:500]))
+			data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200]))
 	except Exception as e:
 		#print(u'无法解包：%s' % (aprs))
-		#print(u'\t错误原因：%s' % e)
+	#	print(u'%s\t错误原因：%s' % (ctime(),e))
 		data_queue.put( aprspacket_sql % (mycall[:16], '', '', '', '','','', aprs[:500].replace("'", "''")))
+		data = {}
 	data_queue.put(packetcount_sql % mycall[:16])
+	return data
 
 def to_mysql():
 	connection = None
@@ -92,7 +95,7 @@ def to_mysql():
 					cursor.execute(data_queue.get())
 				connection.commit()
 			except Exception as e: 
-				print("roolback %s " % ( e))
+				print("%s roolback reason: %s " % (ctime(), e))
 				connection.rollback()
 			finally :
 				data_queue.task_done()
@@ -139,10 +142,10 @@ def process_aprs_data(get_aprs):
 			except UnicodeDecodeError :
 				decoded_str = ""
 				#print(u'接收包解码错误：%s' % get_aprs)
-	packet_segments = re.search(r'([A-Za-z0-9\-]+)>(.*)', decoded_str)
-	if packet_segments is not None :
+	callsign_segments = re.search(r'([A-Za-z0-9\-]+)>(.*)', decoded_str)			#分离出呼号
+	if callsign_segments is not None :		#没有呼号的信息直接跳过
 		try:
-			aprs_decode(packet_segments.groups()[0], decoded_str)
+			data = aprs_decode(callsign_segments.groups()[0], decoded_str)
 		#except aprslib.exceptions.ParseError:
 		except Exception as e:
 			#print(u"无法解析的数据: %s，错误原因：%s " %(decoded_str,e))
@@ -151,11 +154,11 @@ def process_aprs_data(get_aprs):
 def aprs_tcp_client():
 	sock = connect_to_aprs_server(t2aprs_server, callsign, passcode, filter)
 	while True :
-		get_packet = sock.recv(4096)
+		get_packet = sock.recv(4096)			#接收上源服务器APRS信息
 		for line in get_packet.split('\n'):
 			if line:
 				process_aprs_data(line)
-		while aprs_queue.qsize() > 0 :
+		while aprs_queue.qsize() > 0 :			#向上源服务器发送APRS信息
 			try :
 				aprs_data = (aprs_queue.get()+"\n").encode('utf-8')
 				sock.sendall(aprs_data)
@@ -189,8 +192,13 @@ def aprs_udp_server():
 					(user, passcode, _) = user_segments.groups()
 					#print("UDP User %s Passcode %s" % (user,passcode))
 					if int(passcode)==aprslib.passcode(str(user[0:user.find("-")])) :
-						aprs_decode(str(user),aprs_data[1])
-						aprs_queue.put(aprs_data[1])
+						packet_data = aprs_decode(str(user),aprs_data[1])
+						try :
+							if aprs_datatype[packet_data['format']] in ('=', ':', '`') :		#只转发定位包
+								aprs_queue.put(aprs_data[1])
+						except Exception as e :
+							pass
+							#跳过非定位包
 	mSocket.close()
 """
 def aprs_udp_sent(msg):
@@ -244,5 +252,3 @@ if __name__ == '__main__':
 			sleep(10)
 	except KeyboardInterrupt:
 		print("Shutting down...")
-
-
