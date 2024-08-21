@@ -72,7 +72,7 @@ def aprs_decode(mycall, aprs):
 			datatype = aprs_datatype[data['format']]
 		except :
 			datatype = ','
-		if datatype in ('=', ':', '`', 'T'):		#本站只记录定位包
+		if 'weather' not in data:		#本站只记录定位包
 			data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200], (data['raw'].replace("\\","\\\\").replace("'", "''"))[:500]))
 			data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200]))
 	except Exception as e:
@@ -193,12 +193,9 @@ def aprs_udp_server():
 					#print("UDP User %s Passcode %s" % (user,passcode))
 					if int(passcode)==aprslib.passcode(str(user[0:user.find("-")])) :
 						packet_data = aprs_decode(str(user),aprs_data[1])
-						try :
-							if aprs_datatype[packet_data['format']] in ('=', ':', '`') :		#只转发定位包
-								aprs_queue.put(aprs_data[1])
-						except Exception as e :
-							pass
-							#跳过非定位包
+						if ('weather' not in packet_data) and ('latitude' in packet_data):		#只转发定位包
+							aprs_queue.put(aprs_data[1])
+
 	mSocket.close()
 """
 def aprs_udp_sent(msg):
