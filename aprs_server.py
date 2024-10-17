@@ -48,6 +48,24 @@ aprs_datatype={
 	'telemetry-message':'T',
 }
 
+"""
+标识符符号与其功能的对应表
+符号	功能类型	说明
+=	位置报告（无时间戳）	基于压缩或未压缩符号表的位置报告
+!	位置报告（无时间戳）	基于未压缩符号表的位置报告
+/	位置报告（带时间戳）	带时间戳的未压缩位置报告
+@	位置报告（带时间戳）	带时间戳的压缩位置报告
+;	对象报告	特殊事件或对象报告
+>	状态报告	发送电台或设备状态
+_	天气报告	包含天气数据的报告
+:	消息	短文本消息
+?	查询	查询请求或命令
+`	Mic-E 压缩位置报告	使用 Mic-E 压缩编码的位置报告
+&	电台控制命令	用于电台控制或特殊指令
+#	优先级或警报信息	主要用于紧急或高优先级信息
+T	遥测数据	发送遥测数据（如传感器读数）
+"""
+
 def decimal_to_aprs(latitude, longitude):
 	# 将十进制坐标转换为 APRS 格式
 	lat_degrees = int(latitude)
@@ -74,9 +92,14 @@ def aprs_decode(mycall, aprs):
 			datatype = aprs_datatype[data['format']]
 		except :
 			datatype = ','
-		if 'weather' not in data:		#本站只记录定位包
-			data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200], (data['raw'].replace("\\","\\\\").replace("'", "''"))[:500]))
-			data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['comment'].replace("'", "''"))[:200]))
+		if 'weather' not in data:
+			match = re.search(r">(\d{3}/\d{3}/A=\d+.*)", aprs)
+			if match :
+				data['msg'] =  match.group(1)
+			else :
+				data['msg'] = data['common']#本站只记录定位包
+			data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['msg'].replace("'", "''"))[:200], (data['raw'].replace("\\","\\\\").replace("'", "''"))[:500]))
+			data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['msg'].replace("'", "''"))[:200]))
 	except Exception as e:
 		#print(u'无法解包：%s' % (aprs))
 	#	print(u'%s\t错误原因：%s' % (ctime(),e))
