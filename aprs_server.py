@@ -11,13 +11,15 @@ import threading
 import Queue
 
 mysql_config = {
-	"host": "localhost",
-	"port": 3306,
+	#"host": "localhost",
+	#"port": 3306,
 	"user": "aprs",
 	"passwd": "aprs",
 	"db": "aprs",
 	"charset": "utf8",
-	"cursorclass": pymysql.cursors.DictCursor
+	"cursorclass": pymysql.cursors.DictCursor,
+	"connect_timeout":10,
+	"unix_socket":'/var/run/mysqld/mysqld.sock',		#改用unix_socket连接mysql提高性能
 }
 
 upstream_server = ("china.aprs2.net",14580)  # 上游APRS服务器
@@ -92,13 +94,13 @@ def to_mysql():
 			#print("当前序列总数 %d" % data_queue.qsize())
 			try:
 				with connection.cursor() as cursor:
-					cursor.execute(data_queue.get())
-				connection.commit()
+					while data_queue.qsize() > 0 :				#一次性写入mysql
+						cursor.execute(data_queue.get())
+						data_queue.task_done()				#每次get()后task_done()保证队列计数器一致性
+				connection.commit()						#一次性提交，提高mysql性能
 			except Exception as e: 
 				print("%s roolback reason: %s " % (ctime(), e))
 				connection.rollback()
-			finally :
-				data_queue.task_done()
 		else :
 			try:
 				connection.ping()
@@ -163,12 +165,11 @@ def aprs_tcp_client(timeout=30):
 			while aprs_queue.qsize() > 0 :			#向上源服务器发送APRS信息
 				try :
 					aprs_data = (aprs_queue.get()+"\n").encode('utf-8')
+					aprs_queue.task_done()
 					sock.sendall(aprs_data)
 				except Exception as e:
 					print("%s 转发aprs失败：%s" % (ctime(), e))
 					break
-				finally:
-					aprs_queue.task_done()
 		except socket.timeout:
 			print("%s TCP Receiving data timed out" % (ctime()))
 			break
