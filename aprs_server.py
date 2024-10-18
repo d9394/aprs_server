@@ -99,7 +99,7 @@ def aprs_decode(mycall, aprs):
 			#else :
 			#	data['msg'] = data['common']#本站只记录定位包
 			if data.get('speed') or data.get('course') or data.get('altitude') :
-				data['msg'] = ("000" + str(int(data.get('course', 0))))[-3:] + "/" + ("000" + str(int(data.get('speed', 0))))[-3:] + "/A=" + ("000000" + str(int(data.get('altitude', 0) * 3.281 )))[-6:]
+				data['msg'] = ("000" + str(int(data.get('course', 0))))[-3:] + "/" + ("000" + str(int(data.get('speed', 0) / 1.852 )))[-3:] + "/A=" + ("000000" + str(int(data.get('altitude', 0) * 3.281 )))[-6:]
 			data['msg'] = data.get('msg', "") + " " + data['comment']
 			data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['msg'].replace("'", "''"))[:200], (data['raw'].replace("\\","\\\\").replace("'", "''"))[:500]))
 			data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['msg'].replace("'", "''"))[:200]))
