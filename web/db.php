@@ -15,6 +15,8 @@ if(mysqli_connect_error()){
 	echo mysqli_connect_error();
 }
 
+// 设置字符集为UTF-8
+$mysqli->set_charset('utf8');
 //$mysqli->query("SET NAMES utf8");
 
 session_start();
