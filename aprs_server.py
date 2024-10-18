@@ -9,6 +9,7 @@ import re
 import aprslib
 import threading
 import Queue
+import chardet
 
 mysql_config = {
 	#"host": "localhost",
@@ -156,6 +157,8 @@ def connect_to_aprs_server(upt2aprs_server, callsign, passcode, filter):
 	return sock
 	
 def process_aprs_data(get_aprs):
+def process_aprs_data(get_aprs):
+	"""
 	try:
 	# 尝试使用 UTF-8 解码
 		decoded_str = get_aprs.decode('utf-8')
@@ -170,6 +173,22 @@ def process_aprs_data(get_aprs):
 			except UnicodeDecodeError :
 				decoded_str = ""
 				#print(u'接收包解码错误：%s' % get_aprs)
+	"""
+	encoding = chardet.detect(get_aprs)['encoding']
+	if encoding is None:
+		# 如果 chardet 无法检测到编码，则使用默认解码
+		try:
+			decoded_str = get_aprs.decode()
+		except UnicodeDecodeError:
+			decoded_str = ""
+			print("接收包编码识别错误：%s" % get_aprs)
+	else:
+		# 尝试使用检测到的编码解码
+		try:
+			decoded_str = get_aprs.decode(encoding)
+		except UnicodeDecodeError:
+			decoded_str = ""
+			print("接收包编码识别错误：%s (尝试使用 %s 解码)" % (get_aprs, encoding))
 	callsign_segments = re.search(r'([A-Za-z0-9\-]+)>(.*)', decoded_str)			#分离出呼号
 	if callsign_segments is not None :		#没有呼号的信息直接跳过
 		try:
