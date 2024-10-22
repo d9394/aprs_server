@@ -1100,7 +1100,7 @@ if ($cmd=="new") {
 	echo "<h3>最新收到的APRS数据包</h3>";
 	$q="select tm,`call`,raw from aprspacket where tm>=curdate() order by tm desc limit 10";
 	$result = $mysqli->query($q);
-	echo "<table border=1 cellspacing=0><tr><th>时间</th><th>呼号</th><th>APRS Packet</th><th>地图</th></tr>\n";
+	echo "<table border=1 cellspacing=0 width=100%><tr><th width=100px>时间</th><th width=100px>呼号</th><th>APRS Packet</th><th width=160px>地图</th></tr>\n";
 	while($r=$result->fetch_array()) {
         	echo "<tr><td>";
         	echo $r[0];
@@ -1117,7 +1117,7 @@ if ($cmd=="new") {
 	echo "<h3>最新收到的无法解析经纬度的APRS数据包</h3>";
 	$q="select tm,`call`,raw from aprspacket where tm>=curdate() and lat='' order by tm desc limit 10";
 	$result = $mysqli->query($q);
-	echo "<table border=1 cellspacing=0><tr><th>时间</th><th>呼号</th><th>APRS Packet</th></tr>\n";
+	echo "<table border=1 cellspacing=0 width=100%><tr><th width=100px>时间</th><th width=100px>呼号</th><th>APRS Packet</th></tr>\n";
 	while($r=$result->fetch_array()) {
         	echo "<tr><td>";
         	echo $r[0];
