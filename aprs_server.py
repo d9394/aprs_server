@@ -201,28 +201,34 @@ def process_aprs_data(get_aprs):
 def aprs_tcp_client(timeout=30):
 	sock = connect_to_aprs_server(t2aprs_server, callsign, passcode, filter)
 	sock.settimeout(timeout)
-	while True :
-		try :
-			get_packet = sock.recv(4096)			#接收上源服务器APRS信息
-			for line in get_packet.split('\n'):
-				if line:
-					process_aprs_data(line)
-			while aprs_queue.qsize() > 0 :			#向上源服务器发送APRS信息
-				try :
-					aprs_data = (aprs_queue.get()+"\n").encode('utf-8')
-					aprs_queue.task_done()
-					sock.sendall(aprs_data)
-				except Exception as e:
-					print("%s 转发aprs失败：%s" % (ctime(), e))
+	try ：
+		while True :
+			try :
+				get_packet = sock.recv(4096)			#接收上源服务器APRS信息
+				if not get_packet:  # 检查是否断开
+					print("连接断开")
 					break
-		except socket.timeout:
-			print("%s TCP Receiving data timed out" % (ctime()))
-			break
-		except Exception as e:
-			print("%s Error receiving TCP data: %s" % (ctime(),e))
-			break
-	print("TCP连接关闭")
-	sock.close()
+				for line in get_packet.split('\n'):
+					if line:
+						process_aprs_data(line)
+				while aprs_queue.qsize() > 0 :			#向上源服务器发送APRS信息
+					try :
+						aprs_data = (aprs_queue.get(timeout=1)+"\n").encode('utf-8')
+						sock.sendall(aprs_data)
+						aprs_queue.task_done()
+					except Exception as e:
+						print("%s 转发aprs失败：%s" % (ctime(), e))
+						break
+						
+			except socket.timeout:
+				print("%s TCP Receiving data timed out" % (ctime()))
+				break
+			except Exception as e:
+				print("%s Error receiving TCP data: %s" % (ctime(),e))
+				break
+	finally:
+		print("TCP连接关闭")
+		sock.close()
 
 def aprs_tcp_server():
 	while True :
