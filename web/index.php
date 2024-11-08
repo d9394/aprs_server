@@ -1426,6 +1426,9 @@ if ($cmd=="setup") {
 			$lon = $p->getX();
 			$lat = $p->getY();
 		echo "百度地图纬度/经度：$lat/$lon<p>";
+	}else{
+		$lati=23.0;
+		$loni=113.0;
 	}
 	echo "<form action=".$_SERVER["PHP_SELF"]." method=POST>";
 	echo "<input name=setup type=hidden>";
