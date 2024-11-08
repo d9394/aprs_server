@@ -31,7 +31,7 @@ passcode = "12345"  # 替换为你的APRS-IS passcode
 filter = "r/35.0/103.0/2500" # 替换为你想要使用的APRS过滤器
 
 aprspacket_sql="INSERT INTO aprspacket (`call`,datatype, lat, lon, `table`, symbol, msg, raw) VALUES ('%s','%s','%s','%s','%s','%s','%s','%s');"
-lastpacket_sql="REPLACE INTO lastpacket (`call`, datatype, lat, lon, `table`, symbol, msg) VALUES ('%s','%s','%s','%s','%s','%s','%s');"
+lastpacket_sql="REPLACE INTO lastpacket (`call`, datatype, lat, lon, `table`, symbol, msg, speed) VALUES ('%s','%s','%s','%s','%s','%s','%s',%d);"
 packetstatus_sql="INSERT INTO packetstats VALUES(curdate(),1) ON DUPLICATE KEY UPDATE packets=packets+1 ;"
 packetcount_sql="INSERT into aprspackethourcount values (DATE_FORMAT(now(), '%%Y-%%m-%%d %%H:00:00'), '%s', 1) ON DUPLICATE KEY UPDATE pkts=pkts+1 ;"
 
@@ -66,6 +66,14 @@ _	天气报告	包含天气数据的报告
 #	优先级或警报信息	主要用于紧急或高优先级信息
 T	遥测数据	发送遥测数据（如传感器读数）
 """
+def convert_speed_to_int(aprs_data):
+	try:
+		# 将 speed 字符串转换为整数
+		speed_int = int(aprs_data['speed'])
+		return speed_int
+	except ValueError:
+		# 如果转换失败，返回 0
+		return 0
 
 def decimal_to_aprs(latitude, longitude):
 	# 将十进制坐标转换为 APRS 格式
@@ -103,7 +111,7 @@ def aprs_decode(mycall, aprs):
 				data['msg'] = ("000" + str(int(data.get('course', 0))))[-3:] + "/" + ("000" + str(int(data.get('speed', 0) / 1.852 )))[-3:] + "/A=" + ("000000" + str(int(data.get('altitude', 0) * 3.281 )))[-6:]
 			data['msg'] = data.get('msg', "") + " " + data['comment']
 			data_queue.put( aprspacket_sql % (data['from'][:16], datatype, lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['msg'].replace("'", "''"))[:200], (data['raw'].replace("\\","\\\\").replace("'", "''"))[:500]))
-			data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['msg'].replace("'", "''"))[:200]))
+			data_queue.put( lastpacket_sql % (data['from'][:16], datatype,lat, lon, data['symbol_table'][:1].replace("\\","\\\\").replace("'", "''"), data['symbol'][:1].replace("\\","\\\\").replace("'", "''"), (data['msg'].replace("'", "''"))[:200], convert_speed_to_int(data)))
 	except Exception as e:
 		#print(u'无法解包：%s' % (aprs))
 	#	print(u'%s\t错误原因：%s' % (ctime(),e))
