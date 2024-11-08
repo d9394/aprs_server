@@ -815,7 +815,7 @@ map.addEventListener('resize', map_resize);
 		echo "UpdateStation();\n";
 	} else  {			// try IP location
 		$IP = GetIP();
-  		$content = file_get_contents("http://api.map.baidu.com/location/ip?ak=".$ak."&ip=".$IP."&coor=bd09ll");
+  		$content = file_get_contents("https://api.map.baidu.com/location/ip?ak=".$ak."&ip=".$IP."&coor=bd09ll");
   		$json = json_decode($content);
 		if(isset($json->{'status'}) && ($json->{'status'}==0)) {
 			echo "map.centerAndZoom(new BMap.Point(";
@@ -1431,6 +1431,9 @@ if ($cmd=="setup") {
 			$lon = $p->getX();
 			$lat = $p->getY();
 		echo "百度地图纬度/经度：$lat/$lon<p>";
+	}else{
+		$lati=23.0;
+		$loni=113.0;
 	}
 	echo "<form action=".$_SERVER["PHP_SELF"]." method=POST>";
 	echo "<input name=setup type=hidden>";
