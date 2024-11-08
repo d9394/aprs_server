@@ -1119,6 +1119,22 @@ if ($cmd=="new") {
 	}
 	echo "</table>\n";
 
+	echo "<h3>最新收到正在移动的APRS数据包</h3>";
+	$q="select tm,`call`,msg from lastpacket where tm>=curdate() and speed > 0 order by tm desc limit 10";
+	$result = $mysqli->query($q);
+	echo "<table border=1 cellspacing=0 width=100%><tr><th width=180px>时间</th><th width=100px>呼号</th><th>APRS Packet</th></tr>\n";
+	while($r=$result->fetch_array()) {
+        	echo "<tr><td>";
+        	echo $r[0];
+        	echo "</td><td>";
+        	echo "<a href=".$_SERVER["PHP_SELF"]."?call=$r[1]>$r[1]</a>";
+        	echo "</td><td>";
+		echo $r[2];  //raw
+        	echo "</td></tr>\n";
+	}
+	echo "</table>\n";
+
+/*
 	echo "<h3>最新收到的无法解析经纬度的APRS数据包</h3>";
 	$q="select tm,`call`,raw from aprspacket where tm>=curdate() and lat='' order by tm desc limit 10";
 	$result = $mysqli->query($q);
