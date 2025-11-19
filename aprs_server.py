@@ -165,7 +165,6 @@ def connect_to_aprs_server(upt2aprs_server, callsign, passcode, filter):
 	return sock
 	
 def process_aprs_data(get_aprs):
-def process_aprs_data(get_aprs):
 	"""
 	try:
 	# 尝试使用 UTF-8 解码
@@ -206,37 +205,68 @@ def process_aprs_data(get_aprs):
 			#print(u"无法解析的数据: %s，错误原因：%s " %(decoded_str,e))
 			pass
 
-def aprs_tcp_client(timeout=30):
-	sock = connect_to_aprs_server(t2aprs_server, callsign, passcode, filter)
-	sock.settimeout(timeout)
-	try ：
-		while True :
-			try :
-				get_packet = sock.recv(4096)			#接收上源服务器APRS信息
-				if not get_packet:  # 检查是否断开
-					print("连接断开")
-					break
-				for line in get_packet.split('\n'):
-					if line:
-						process_aprs_data(line)
-				while aprs_queue.qsize() > 0 :			#向上源服务器发送APRS信息
-					try :
-						aprs_data = (aprs_queue.get(timeout=1)+"\n").encode('utf-8')
-						sock.sendall(aprs_data)
-						aprs_queue.task_done()
-					except Exception as e:
-						print("%s 转发aprs失败：%s" % (ctime(), e))
-						break
-						
-			except socket.timeout:
-				print("%s TCP Receiving data timed out" % (ctime()))
-				break
-			except Exception as e:
-				print("%s Error receiving TCP data: %s" % (ctime(),e))
-				break
-	finally:
-		print("TCP连接关闭")
-		sock.close()
+def aprs_tcp_client(timeout=30, reconnect_delay=10):
+    # 使用 print() 函数和 % 格式化
+    print("Thread ID:%s, name : %s" % (hex(threading.current_thread().ident), "aprs_tcp_client"))
+    
+    while True: # 外部循环：用于重连
+        sock = None
+        try:
+            print("%s 尝试连接到 APRS 服务器..." % ctime())
+            sock = connect_to_aprs_server(t2aprs_server, callsign, passcode, filter)
+            sock.settimeout(timeout)
+            print("%s 连接成功！开始接收数据..." % ctime())
+
+            while True: # 内部循环：数据接收与发送
+                try:
+                    # --- 1. 接收数据 ---
+                    get_packet = sock.recv(4096)
+                    if not get_packet:
+                        print("%s 连接断开 (服务器关闭连接或发送空数据)。" % ctime())
+                        break 
+                    
+                    for line in get_packet.split('\n'):
+                        if line.strip(): 
+                            process_aprs_data(line.strip())
+
+                    # --- 2. 发送数据 ---
+                    while aprs_queue.qsize() > 0:
+                        try:
+                            aprs_data = aprs_queue.get_nowait() + "\n"
+                            sock.sendall(aprs_data)
+                            aprs_queue.task_done()
+                        except queue.Empty:
+                            break 
+                        except Exception, e: 
+                            print("%s 转发aprs失败：%s" % (ctime(), e))
+                            break
+                        
+                except socket.timeout:
+                    print("%s TCP 接收数据超时，继续等待..." % ctime())
+                    continue
+                except Exception, e: 
+                    print("%s Error during data transmission (will attempt reconnect): %s" % (ctime(), e))
+                    break 
+                    
+        # 兼容 Python 2 的异常捕获
+        except socket.error, e:
+            if 'Connection refused' in str(e):
+                print("%s 连接失败: 目标服务器拒绝连接。" % ctime())
+            elif 'Name or service not known' in str(e) or 'getaddrinfo failed' in str(e):
+                 print("%s 连接失败: 无法解析服务器地址或端口错误。" % ctime())
+            else:
+                 print("%s 建立连接时发生错误: %s" % (ctime(), e))
+        except Exception, e:
+            print("%s 建立连接时发生未知错误: %s" % (ctime(), e))
+
+        finally:
+            if sock:
+                print("%s TCP 连接关闭。" % ctime())
+                sock.close()
+            
+            # 等待一段时间后尝试重连
+            print("%s 等待 %s 秒后尝试重新连接..." % (ctime(), reconnect_delay))
+            time.sleep(reconnect_delay)
 
 def aprs_tcp_server():
 	while True :
