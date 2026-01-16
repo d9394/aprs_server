@@ -1,4 +1,7 @@
-### 原为BG6CQ( https://github.com/bg6cq/aprs )写的APRS服务器程序，源代码用C完成，由于不同环境的C程序的需重新编译，有些场景无法编译，故取其web显示部份（PHP），接收数据及解码处理待改用python重写    
+### 原为BG6CQ( https://github.com/bg6cq/aprs )写的APRS服务器程序，源代码用C完成，由于不同环境的C程序的需重新编译，有些场景无法编译，故取其web显示部份（PHP），接收数据及解码处理待改用python重写 
+
+需要安装的python包：pip install aprslib chardet pymysql
+
 #### 20250101：   
     已完成：   
       1、通过pyAPRS包完成解码编码，支持压缩座标等    
@@ -18,5 +21,6 @@
     有待实现的功能：   
     1。TCP接收
     2、SDR接收并解码
+
 
 
