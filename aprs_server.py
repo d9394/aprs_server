@@ -8,7 +8,10 @@ from time import sleep,ctime
 import re
 import aprslib
 import threading
-import Queue
+try:
+    import queue as Queue
+except ImportError:
+    import Queue 
 import chardet
 
 mysql_config = {
