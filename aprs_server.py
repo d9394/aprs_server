@@ -237,14 +237,14 @@ def aprs_tcp_client(timeout=30, reconnect_delay=10):
                             aprs_queue.task_done()
                         except queue.Empty:
                             break 
-                        except Exception, e: 
+                        except Exception as e: 
                             print("%s 转发aprs失败：%s" % (ctime(), e))
                             break
                         
                 except socket.timeout:
                     print("%s TCP 接收数据超时，继续等待..." % ctime())
                     continue
-                except Exception, e: 
+                except Exception as e: 
                     print("%s Error during data transmission (will attempt reconnect): %s" % (ctime(), e))
                     break 
                     
@@ -256,7 +256,7 @@ def aprs_tcp_client(timeout=30, reconnect_delay=10):
                  print("%s 连接失败: 无法解析服务器地址或端口错误。" % ctime())
             else:
                  print("%s 建立连接时发生错误: %s" % (ctime(), e))
-        except Exception, e:
+        except Exception as e:
             print("%s 建立连接时发生未知错误: %s" % (ctime(), e))
 
         finally:
