@@ -269,7 +269,7 @@ def aprs_tcp_client(timeout=30, reconnect_delay=10):
             
             # 等待一段时间后尝试重连
             print("%s 等待 %s 秒后尝试重新连接..." % (ctime(), reconnect_delay))
-            time.sleep(reconnect_delay)
+            sleep(reconnect_delay)
 
 def aprs_tcp_server():
 	while True :
