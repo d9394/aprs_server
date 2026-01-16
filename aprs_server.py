@@ -321,7 +321,7 @@ thread_targets = {
 # 启动线程
 def start_thread(name, target):
 	thread = threading.Thread(target=target, name=name)
-	thread.setDaemon(True)  # 将线程设置为守护线程
+	thread.daemon = True  # 将线程设置为守护线程
 	thread.start()
 	threads[name] = thread
 	print("%s Starting %s thread" % (ctime(),name))
@@ -342,7 +342,7 @@ if __name__ == '__main__':
 	
 	# 启动线程检查
 	check_thread = threading.Thread(target=check_threads)
-	check_thread.setDaemon(True)  # 将线程设置为守护线程
+	check_thread.daemon = True  # 将线程设置为守护线程
 	check_thread.start()
 	
 	# 主线程保持运行
