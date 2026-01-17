@@ -293,7 +293,7 @@ def aprs_tcp_client(timeout=30, reconnect_delay=10):
                 sock.close()
             
             print("%s 等待 %s 秒后尝试重新连接..." % (ctime(), reconnect_delay))
-            time.sleep(reconnect_delay)
+            sleep(reconnect_delay)
 
 def aprs_tcp_server():
 	while True :
