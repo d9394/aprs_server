@@ -26,7 +26,7 @@ mysql_config = {
 	"unix_socket":'/var/run/mysqld/mysqld.sock',		#改用unix_socket连接mysql提高性能
 }
 
-upstream_server = ("china.aprs2.net",14580)  # 上游APRS服务器
+t2aprs_server = ("china.aprs2.net",14580)  # 上游APRS服务器
 forward_server = ("asia.aprs2.net",14580)  # 上游APRS服务器
 callsign = "test"  # 替换为你的呼号
 passcode = "12345"  # 替换为你的APRS-IS passcode
@@ -159,14 +159,6 @@ def mysql_connect() :
 			continue
 	return connection
 
-def connect_to_aprs_server(upt2aprs_server, callsign, passcode, filter):
-	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	sock.connect(upt2aprs_server)
-	login = "user %s pass %s vers python-aprs 1.0 filter %s\n" % (callsign, passcode, filter)
-	#user N0CALL-1 pass 13023 vers python-aprs 1.0 filter b/B*
-	sock.sendall(login.encode('utf-8'))
-	return sock
-	
 def process_aprs_data(get_aprs):
 	"""
 	try:
@@ -208,11 +200,44 @@ def process_aprs_data(get_aprs):
 			#print(u"无法解析的数据: %s，错误原因：%s " %(decoded_str,e))
 			pass
 
+# --- 兼容性转换函数 ---
+def to_bytes(s):
+    """将字符串转换为字节流 (兼容 Py2/Py3)"""
+    if sys.version_info[0] >= 3:
+        if isinstance(s, str):
+            return s.encode('utf-8')
+    return s
+
+def to_str(b):
+    """将字节流转换为字符串 (兼容 Py2/Py3)"""
+    if sys.version_info[0] >= 3:
+        if isinstance(b, bytes):
+            return b.decode('utf-8', 'ignore')
+    return b
+
+def connect_to_aprs_server(upt2aprs_server, callsign, passcode, filter_str):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect(upt2aprs_server)
+    login_str = "user %s pass %s vers python-aprs 1.0 filter %s\n" % (callsign, passcode, filter_str)
+    
+    # 关键点：发送前必须转为 bytes
+    sock.sendall(to_bytes(login_str))
+    return sock
+
+'''
+def connect_to_aprs_server(upt2aprs_server, callsign, passcode, filter):
+	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	sock.connect(upt2aprs_server)
+	login = "user %s pass %s vers python-aprs 1.0 filter %s\n" % (callsign, passcode, filter)
+	#user N0CALL-1 pass 13023 vers python-aprs 1.0 filter b/B*
+	sock.sendall(login.encode('utf-8'))
+	return sock
+'''
+
 def aprs_tcp_client(timeout=30, reconnect_delay=10):
-    # 使用 print() 函数和 % 格式化
     print("Thread ID:%s, name : %s" % (hex(threading.current_thread().ident), "aprs_tcp_client"))
     
-    while True: # 外部循环：用于重连
+    while True: 
         sock = None
         try:
             print("%s 尝试连接到 APRS 服务器..." % ctime())
@@ -220,27 +245,32 @@ def aprs_tcp_client(timeout=30, reconnect_delay=10):
             sock.settimeout(timeout)
             print("%s 连接成功！开始接收数据..." % ctime())
 
-            while True: # 内部循环：数据接收与发送
+            while True: 
                 try:
                     # --- 1. 接收数据 ---
-                    get_packet = sock.recv(4096)
-                    if not get_packet:
-                        print("%s 连接断开 (服务器关闭连接或发送空数据)。" % ctime())
+                    raw_data = sock.recv(4096)
+                    if not raw_data:
+                        print("%s 连接断开 (服务器关闭)。" % ctime())
                         break 
                     
-                    for line in get_packet.split('\n'):
+                    # 关键点：将接收到的 bytes 转换为 str 再处理
+                    data_str = to_str(raw_data)
+                    for line in data_str.split('\n'):
                         if line.strip(): 
                             process_aprs_data(line.strip())
 
                     # --- 2. 发送数据 ---
                     while aprs_queue.qsize() > 0:
                         try:
-                            aprs_data = aprs_queue.get_nowait() + "\n"
-                            sock.sendall(aprs_data)
+                            # 获取队列中的字符串
+                            raw_aprs_item = aprs_queue.get_nowait()
+                            # 拼接并转换为 bytes 发送
+                            aprs_data_to_send = to_bytes(raw_aprs_item + "\n")
+                            sock.sendall(aprs_data_to_send)
                             aprs_queue.task_done()
                         except queue.Empty:
                             break 
-                        except Exception as e: 
+                        except Exception as e: # 注意：Python 3 必须用 'as e'，Py2.7 也支持
                             print("%s 转发aprs失败：%s" % (ctime(), e))
                             break
                         
@@ -248,28 +278,22 @@ def aprs_tcp_client(timeout=30, reconnect_delay=10):
                     print("%s TCP 接收数据超时，继续等待..." % ctime())
                     continue
                 except Exception as e: 
-                    print("%s Error during data transmission (will attempt reconnect): %s" % (ctime(), e))
+                    print("%s 数据处理异常 (准备重连): %s" % (ctime(), e))
                     break 
                     
-        # 兼容 Python 2 的异常捕获
-        except socket.error, e:
-            if 'Connection refused' in str(e):
-                print("%s 连接失败: 目标服务器拒绝连接。" % ctime())
-            elif 'Name or service not known' in str(e) or 'getaddrinfo failed' in str(e):
-                 print("%s 连接失败: 无法解析服务器地址或端口错误。" % ctime())
-            else:
-                 print("%s 建立连接时发生错误: %s" % (ctime(), e))
+        except socket.error as e:
+            # 捕获连接相关的错误
+            print("%s 网络连接错误: %s" % (ctime(), e))
         except Exception as e:
-            print("%s 建立连接时发生未知错误: %s" % (ctime(), e))
+            print("%s 未知错误: %s" % (ctime(), e))
 
         finally:
             if sock:
                 print("%s TCP 连接关闭。" % ctime())
                 sock.close()
             
-            # 等待一段时间后尝试重连
             print("%s 等待 %s 秒后尝试重新连接..." % (ctime(), reconnect_delay))
-            sleep(reconnect_delay)
+            time.sleep(reconnect_delay)
 
 def aprs_tcp_server():
 	while True :
