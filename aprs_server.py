@@ -8,7 +8,10 @@ import pymysql.cursors
 from time import sleep,ctime
 import re
 import threading
-import queue as Queue
+try:
+    import queue as Queue
+except:
+    import Queue
 import chardet
 
 mysql_config = {
