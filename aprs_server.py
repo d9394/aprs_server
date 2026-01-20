@@ -270,6 +270,16 @@ def process_aprs_data(get_aprs):
             # print("无法解析的数据: %s, 错误: %s" % (decoded_str, e))
             pass
 
+'''
+def connect_to_aprs_server(upt2aprs_server, callsign, passcode, filter):
+....sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+....sock.connect(upt2aprs_server)
+....login = "user %s pass %s vers python-aprs 1.0 filter %s\n" % (callsign, passcode, filter)
+....#user N0CALL-1 pass 13023 vers python-aprs 1.0 filter b/B*
+....sock.sendall(login.encode('utf-8'))
+....return sock
+'''
+
 def connect_to_aprs_server(server_addr, call, pwd, aprs_filter_val):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect(server_addr)
