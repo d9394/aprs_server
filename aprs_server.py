@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #coding=utf8
 import sys
-sys.path.append("/home/aprs/aprs-python-master")
+#sys.path.append("/home/aprs/aprs-python-master")
 import aprslib
 import socket
 import pymysql.cursors
